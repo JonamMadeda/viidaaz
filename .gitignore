@@ -1,0 +1,12 @@
+# Build artifacts
+build/
+dist/
+__pycache__/
+*.pyc
+*.spec
+
+# Fetched at build time (see tools/fetch_ffmpeg.py) — not committed
+ffmpeg/
+
+# Installer output is a release asset, not a repo file
+installer/viidaa-Setup.exe
