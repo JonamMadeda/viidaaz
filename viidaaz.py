@@ -57,7 +57,7 @@ STRATEGY_CLIENTS = {
     "TV": ["tv"],
 }
 
-APP_VERSION = "v2.4"
+APP_VERSION = "v2.5"
 
 # Auto-update source: latest GitHub release + Setup asset below.
 GITHUB_OWNER = "JonamMadeda"
@@ -282,13 +282,8 @@ class ViidaazApp(ctk.CTk):
         self.minsize(980, 660)
         self.configure(fg_color=BG_COLOR)
         self._set_app_icon()
-        # The window may never exceed the plugged display (bad zoom / clone
-        # setups, DPI-virtualized screens). Measured via WinAPI, not Tk.
-        try:
-            sw, sh, _ox, _oy = self._display_workarea()
-            self.maxsize(sw, sh)
-        except Exception:
-            pass
+        self._guard_after_id = None
+        self._guard_busy = False
 
         self.download_dir = get_default_download_dir()
         self.is_downloading = False
@@ -553,7 +548,8 @@ class ViidaazApp(ctk.CTk):
             self.update_idletasks()
         except Exception:
             pass
-        self.after(400, self._fit_to_screen)
+        # The guardian verifies the result and fixes any overshoot.
+        self._guard_window()
 
     def _display_workarea(self):
         """Visible work area of the monitor holding the window, in Tk units.
@@ -598,37 +594,71 @@ class ViidaazApp(ctk.CTk):
                 pass
         return sw, sh, ox, oy
 
-    def _fit_to_screen(self):
-        """Pull an oversized/off-screen window back onto the display.
-
-        Never re-zooms: on some DPI/virtual-desktop setups zoomed itself
-        overshoots, so an explicit work-area geometry is the safe end state.
-        """
+    # ------------------------------------------------------------------
+    # Window guardian — fits the screen automatically, on any monitor,
+    # after any maximize / restore / move / DPI change. Never fights a
+    # fitting window; only corrects overflow or content clipping.
+    # ------------------------------------------------------------------
+    def _guard_window(self, _event=None):
+        if self._guard_after_id:
+            try:
+                self.after_cancel(self._guard_after_id)
+            except Exception:
+                pass
         try:
-            sw, sh, ox, oy = self._display_workarea()
-            try:
-                self.maxsize(sw, sh)
-            except Exception:
-                pass
-            w, h, x, y = (self.winfo_width(), self.winfo_height(),
-                          self.winfo_x(), self.winfo_y())
-            if (w <= sw and h <= sh and x >= ox - 32 and y >= oy - 32
-                    and x <= ox + sw - 120 and y <= oy + sh - 120):
-                return  # fits — leave the window manager alone
-            try:
-                self.state("normal")
-            except Exception:
-                pass
-            try:
-                self.geometry(f"{sw}x{sh}+{ox}+{oy}")
-            except Exception:
-                pass
-            try:
-                self.update_idletasks()
-            except Exception:
-                pass
+            self._guard_after_id = self.after(250, self._guard_now)
         except Exception:
             pass
+
+    def _content_need(self) -> tuple:
+        """Minimum window (w, h) showing everything unclipped, measured live."""
+        try:
+            deck = self.command_card.winfo_reqheight()
+            rail = self.controls_col.winfo_reqheight()
+            prog = self.progress_card.winfo_reqheight()
+        except Exception:
+            return 980, 700
+        zone2 = max(rail, prog + 140)  # 140px keeps the activity log useful
+        return 980, 66 + 2 + deck + 10 + zone2 + 24 + 32
+
+    def _guard_now(self):
+        if self._guard_busy:
+            return
+        self._guard_busy = True
+        try:
+            sw, sh, ox, oy = self._display_workarea()
+            need_w, need_h = self._content_need()
+            want_w = min(max(need_w, 980), sw)
+            want_h = min(max(need_h, 660), sh)
+            w, h, x, y = (self.winfo_width(), self.winfo_height(),
+                          self.winfo_x(), self.winfo_y())
+            new_w, new_x = w, x
+            if w < want_w and want_w <= sw:
+                new_w = want_w
+            elif w > sw:
+                new_w, new_x = sw, ox
+            elif x < ox - 32 or x > ox + sw - 120:
+                new_x = ox
+            new_h, new_y = h, y
+            if h < want_h and want_h <= sh:
+                new_h = want_h
+                if y < oy or y > oy + sh - want_h:
+                    new_y = oy
+            elif h > sh:
+                new_h, new_y = sh, oy
+            elif y < oy - 32 or y > oy + sh - 120:
+                new_y = oy
+            if (new_w, new_h, new_x, new_y) != (w, h, x, y):
+                try:
+                    self.state("normal")
+                except Exception:
+                    pass
+                try:
+                    self.geometry(f"{new_w}x{new_h}+{new_x}+{new_y}")
+                except Exception:
+                    pass
+        finally:
+            self._guard_busy = False
 
     # ------------------------------------------------------------------
     # Layout: header / two-pane content / footer
@@ -637,6 +667,7 @@ class ViidaazApp(ctk.CTk):
         # Same charcoal as the app background — one continuous surface,
         # separated from content only by the orange rule below.
         bar = ctk.CTkFrame(self, fg_color=BG_COLOR, corner_radius=0, height=66)
+        self.header_bar = bar
         bar.grid(row=0, column=0, sticky="ew")
         bar.grid_columnconfigure(0, weight=1)
         bar.grid_propagate(False)
@@ -790,6 +821,7 @@ class ViidaazApp(ctk.CTk):
                             corner_radius=14)
         card.grid(row=0, column=0, sticky="ew")
         card.grid_columnconfigure(0, weight=1)
+        self.command_card = card
         _section_title(card, "Download").grid(
             row=0, column=0, sticky="w", padx=18, pady=(10, 6))
 
@@ -941,6 +973,7 @@ class ViidaazApp(ctk.CTk):
                             corner_radius=14)
         card.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         card.grid_columnconfigure(0, weight=1)
+        self.progress_card = card
         head = ctk.CTkFrame(card, fg_color="transparent")
         head.grid(row=0, column=0, sticky="ew", padx=18, pady=(12, 4))
         head.grid_columnconfigure(0, weight=1)
@@ -1307,6 +1340,8 @@ class ViidaazApp(ctk.CTk):
             except Exception:
                 pass
         self._resize_after_id = self.after(150, self._apply_responsive)
+        # Any user-driven maximize / restore / move re-runs the fit guardian.
+        self._guard_window()
 
     def _apply_responsive(self):
         try:
