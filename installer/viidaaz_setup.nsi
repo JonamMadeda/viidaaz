@@ -3,7 +3,7 @@
 ; Output: installer\viidaaz-Setup.exe
 
 !define APPNAME "viidaaz"
-!define APPVERSION "2.5"
+!define APPVERSION "2.6"
 !define PUBLISHER "JonamMadeda"
 !define EXE "viidaaz.exe"
 !define SETUP "viidaaz-Setup.exe"

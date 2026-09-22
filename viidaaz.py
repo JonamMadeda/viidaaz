@@ -57,7 +57,7 @@ STRATEGY_CLIENTS = {
     "TV": ["tv"],
 }
 
-APP_VERSION = "v2.5"
+APP_VERSION = "v2.6"
 
 # Auto-update source: latest GitHub release + Setup asset below.
 GITHUB_OWNER = "JonamMadeda"
@@ -552,18 +552,18 @@ class ViidaazApp(ctk.CTk):
         self._guard_window()
 
     def _display_workarea(self):
-        """Visible work area of the monitor holding the window, in Tk units.
+        """Visible work area of the monitor holding the window.
 
-        Uses WinAPI on Windows because Tk's screen metrics go wrong under
-        DPI virtualization / multi-monitor / RDP (window ends up bigger than
-        the viewport with parts unreachable).
+        WinAPI values are used verbatim: from this process's perspective
+        they share a coordinate space with Tk's winfo metrics (virtualized
+        together when unaware, physical pixels when PerMonitorV2-aware),
+        so no manual DPI division — that double-converts and misfires.
         """
         sw, sh, ox, oy = (self.winfo_screenwidth(), self.winfo_screenheight(),
                           0, 0)
         if sys.platform.startswith("win"):
             try:
                 import ctypes
-                scaling = float(self.tk.call("tk", "scaling")) or 1.0
                 hwnd = self.winfo_id()
                 hmon = ctypes.windll.user32.MonitorFromWindow(hwnd, 2)
                 if not hmon:
@@ -587,9 +587,8 @@ class ViidaazApp(ctk.CTk):
                     w = mi.rcWork.right - mi.rcWork.left
                     h = mi.rcWork.bottom - mi.rcWork.top
                     if w > 0 and h > 0:
-                        sw, sh = int(w / scaling), int(h / scaling)
-                        ox = int(mi.rcWork.left / scaling)
-                        oy = int(mi.rcWork.top / scaling)
+                        sw, sh = w, h
+                        ox, oy = mi.rcWork.left, mi.rcWork.top
             except Exception:
                 pass
         return sw, sh, ox, oy
@@ -627,24 +626,35 @@ class ViidaazApp(ctk.CTk):
         self._guard_busy = True
         try:
             sw, sh, ox, oy = self._display_workarea()
+            try:
+                zoomed = self.state() == "zoomed"
+            except Exception:
+                zoomed = False
+            w, h, x, y = (self.winfo_width(), self.winfo_height(),
+                          self.winfo_x(), self.winfo_y())
+            # Maximized windows legitimately bleed a few px past the work
+            # area (invisible borders/shadows). Never "fix" those — touching
+            # a healthy maximize is what yanks it back down.
+            TOL = 24
+            if zoomed and w <= sw + TOL and h <= sh + TOL and x >= ox - TOL \
+                    and y >= oy - TOL:
+                return
             need_w, need_h = self._content_need()
             want_w = min(max(need_w, 980), sw)
             want_h = min(max(need_h, 660), sh)
-            w, h, x, y = (self.winfo_width(), self.winfo_height(),
-                          self.winfo_x(), self.winfo_y())
             new_w, new_x = w, x
-            if w < want_w and want_w <= sw:
+            if w < want_w and want_w <= sw and not zoomed:
                 new_w = want_w
-            elif w > sw:
+            elif w > sw + TOL:
                 new_w, new_x = sw, ox
             elif x < ox - 32 or x > ox + sw - 120:
                 new_x = ox
             new_h, new_y = h, y
-            if h < want_h and want_h <= sh:
+            if h < want_h and want_h <= sh and not zoomed:
                 new_h = want_h
                 if y < oy or y > oy + sh - want_h:
                     new_y = oy
-            elif h > sh:
+            elif h > sh + TOL:
                 new_h, new_y = sh, oy
             elif y < oy - 32 or y > oy + sh - 120:
                 new_y = oy
