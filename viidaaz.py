@@ -57,7 +57,7 @@ STRATEGY_CLIENTS = {
     "TV": ["tv"],
 }
 
-APP_VERSION = "v2.3"
+APP_VERSION = "v2.4"
 
 # Auto-update source: latest GitHub release + Setup asset below.
 GITHUB_OWNER = "JonamMadeda"
