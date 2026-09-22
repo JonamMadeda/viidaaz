@@ -57,7 +57,7 @@ STRATEGY_CLIENTS = {
     "TV": ["tv"],
 }
 
-APP_VERSION = "v2.2"
+APP_VERSION = "v2.3"
 
 # Auto-update source: latest GitHub release + Setup asset below.
 GITHUB_OWNER = "JonamMadeda"
@@ -282,6 +282,13 @@ class ViidaazApp(ctk.CTk):
         self.minsize(980, 660)
         self.configure(fg_color=BG_COLOR)
         self._set_app_icon()
+        # The window may never exceed the plugged display (bad zoom / clone
+        # setups, DPI-virtualized screens). Measured via WinAPI, not Tk.
+        try:
+            sw, sh, _ox, _oy = self._display_workarea()
+            self.maxsize(sw, sh)
+        except Exception:
+            pass
 
         self.download_dir = get_default_download_dir()
         self.is_downloading = False
@@ -304,6 +311,13 @@ class ViidaazApp(ctk.CTk):
         self._log_pristine = True
         self._last_error = ""
         self._save_after_id = None
+        # Collapsible settings cards (rail always fits: collapse unused ones).
+        # Only Output starts open — Destination/Cookies expand on demand and
+        # the choice persists, so short viewports never clip content.
+        self._card_bodies = {}
+        self._card_chevs = {}
+        self._card_state = {"output": True, "destination": False,
+                            "cookies": False}
 
         # Root: header / content / footer
         self.grid_columnconfigure(0, weight=1)
@@ -462,6 +476,12 @@ class ViidaazApp(ctk.CTk):
                 self.footer_right.configure(text=dd)
             except Exception:
                 pass
+        saved_cards = c.get("cards")
+        if isinstance(saved_cards, dict):
+            for key in self._card_state:
+                if isinstance(saved_cards.get(key), bool):
+                    self._card_state[key] = saved_cards[key]
+        self._paint_card_state()
         for var in (self.format_var, self.quality_var, self.strategy_var,
                     self.cookie_var):
             try:
@@ -490,6 +510,7 @@ class ViidaazApp(ctk.CTk):
                 "cookies_file": self.cookies_file,
                 "download_dir": self.download_dir,
                 "appearance": self._appearance,
+                "cards": dict(self._card_state),
             })
         except Exception:
             pass
@@ -530,6 +551,82 @@ class ViidaazApp(ctk.CTk):
                 pass
         try:
             self.update_idletasks()
+        except Exception:
+            pass
+        self.after(400, self._fit_to_screen)
+
+    def _display_workarea(self):
+        """Visible work area of the monitor holding the window, in Tk units.
+
+        Uses WinAPI on Windows because Tk's screen metrics go wrong under
+        DPI virtualization / multi-monitor / RDP (window ends up bigger than
+        the viewport with parts unreachable).
+        """
+        sw, sh, ox, oy = (self.winfo_screenwidth(), self.winfo_screenheight(),
+                          0, 0)
+        if sys.platform.startswith("win"):
+            try:
+                import ctypes
+                scaling = float(self.tk.call("tk", "scaling")) or 1.0
+                hwnd = self.winfo_id()
+                hmon = ctypes.windll.user32.MonitorFromWindow(hwnd, 2)
+                if not hmon:
+                    hmon = ctypes.windll.user32.MonitorFromPoint(0, 0, 1)
+
+                class _RECT(ctypes.Structure):
+                    _fields_ = [("left", ctypes.c_long),
+                                ("top", ctypes.c_long),
+                                ("right", ctypes.c_long),
+                                ("bottom", ctypes.c_long)]
+
+                class _MI(ctypes.Structure):
+                    _fields_ = [("cbSize", ctypes.c_ulong),
+                                ("rcMonitor", _RECT), ("rcWork", _RECT),
+                                ("dwFlags", ctypes.c_ulong)]
+
+                mi = _MI()
+                mi.cbSize = ctypes.sizeof(_MI)
+                if ctypes.windll.user32.GetMonitorInfoW(hmon,
+                                                        ctypes.byref(mi)):
+                    w = mi.rcWork.right - mi.rcWork.left
+                    h = mi.rcWork.bottom - mi.rcWork.top
+                    if w > 0 and h > 0:
+                        sw, sh = int(w / scaling), int(h / scaling)
+                        ox = int(mi.rcWork.left / scaling)
+                        oy = int(mi.rcWork.top / scaling)
+            except Exception:
+                pass
+        return sw, sh, ox, oy
+
+    def _fit_to_screen(self):
+        """Pull an oversized/off-screen window back onto the display.
+
+        Never re-zooms: on some DPI/virtual-desktop setups zoomed itself
+        overshoots, so an explicit work-area geometry is the safe end state.
+        """
+        try:
+            sw, sh, ox, oy = self._display_workarea()
+            try:
+                self.maxsize(sw, sh)
+            except Exception:
+                pass
+            w, h, x, y = (self.winfo_width(), self.winfo_height(),
+                          self.winfo_x(), self.winfo_y())
+            if (w <= sw and h <= sh and x >= ox - 32 and y >= oy - 32
+                    and x <= ox + sw - 120 and y <= oy + sh - 120):
+                return  # fits — leave the window manager alone
+            try:
+                self.state("normal")
+            except Exception:
+                pass
+            try:
+                self.geometry(f"{sw}x{sh}+{ox}+{oy}")
+            except Exception:
+                pass
+            try:
+                self.update_idletasks()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -644,9 +741,47 @@ class ViidaazApp(ctk.CTk):
         card = ctk.CTkFrame(parent, fg_color=FRAME_COLOR,
                             border_color=FRAME_BORDER, border_width=1,
                             corner_radius=14)
-        card.grid(row=row, column=0, sticky="ew", pady=(0, 10))
+        card.grid(row=row, column=0, sticky="ew", pady=(0, 8))
         card.grid_columnconfigure(0, weight=1)
         return card
+
+    def _card_head(self, card, key: str, title_text: str):
+        """Collapsible card header; returns the body frame for content rows."""
+        head = ctk.CTkFrame(card, fg_color="transparent")
+        head.grid(row=0, column=0, sticky="ew", padx=10, pady=(6, 2))
+        head.grid_columnconfigure(1, weight=1)
+        chev = ctk.CTkButton(head, text="▾", width=30, height=26,
+                             corner_radius=7, fg_color="transparent",
+                             hover_color="#3A3A3A", text_color=MUTED_TEXT,
+                             font=ctk.CTkFont(size=13),
+                             command=lambda: self._toggle_card(key))
+        chev.grid(row=0, column=0)
+        _section_title(head, title_text).grid(row=0, column=1, sticky="w",
+                                             padx=(4, 0))
+        body = ctk.CTkFrame(card, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="ew")
+        body.grid_columnconfigure(0, weight=1)
+        self._card_bodies[key] = body
+        self._card_chevs[key] = chev
+        return body
+
+    def _toggle_card(self, key: str):
+        self._card_state[key] = not self._card_state.get(key, True)
+        self._paint_card_state(key)
+        self._schedule_config_save()
+
+    def _paint_card_state(self, key: str | None = None):
+        keys = [key] if key else list(self._card_bodies)
+        for k in keys:
+            open_ = self._card_state.get(k, True)
+            try:
+                if open_:
+                    self._card_bodies[k].grid()
+                else:
+                    self._card_bodies[k].grid_remove()
+                self._card_chevs[k].configure(text="▾" if open_ else "▸")
+            except Exception:
+                pass
 
     def _build_command_card(self):
         """Zone 1: the primary task — link in, Download pressed. Always on top."""
@@ -708,10 +843,9 @@ class ViidaazApp(ctk.CTk):
 
     def _build_output_card(self):
         card = self._card(self.controls_col, 0)
-        _section_title(card, "①  Output").grid(
-            row=0, column=0, sticky="w", padx=18, pady=(12, 6))
-        grid = ctk.CTkFrame(card, fg_color="transparent")
-        grid.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
+        body = self._card_head(card, "output", "①  Output")
+        grid = ctk.CTkFrame(body, fg_color="transparent")
+        grid.grid(row=0, column=0, sticky="ew", padx=14, pady=(6, 8))
         grid.grid_columnconfigure((0, 1), weight=1)
         ctk.CTkLabel(grid, text="Format", font=ctk.CTkFont(size=12),
                      text_color=MUTED_TEXT).grid(
@@ -722,52 +856,51 @@ class ViidaazApp(ctk.CTk):
         self.format_var = tk.StringVar(value=FORMAT_OPTIONS[0])
         self.quality_var = tk.StringVar(value=QUALITY_OPTIONS[0])
         ctk.CTkOptionMenu(grid, variable=self.format_var,
-                          values=FORMAT_OPTIONS, height=40, corner_radius=10,
+                          values=FORMAT_OPTIONS, height=38, corner_radius=10,
                           fg_color="#1A1A1A", button_color=ACCENT,
                           button_hover_color=ACCENT_HOVER,
                           text_color=MAIN_TEXT,
                           font=ctk.CTkFont(size=13)).grid(
             row=1, column=0, sticky="ew")
         ctk.CTkOptionMenu(grid, variable=self.quality_var,
-                          values=QUALITY_OPTIONS, height=40, corner_radius=10,
+                          values=QUALITY_OPTIONS, height=38, corner_radius=10,
                           fg_color="#1A1A1A", button_color=ACCENT,
                           button_hover_color=ACCENT_HOVER,
                           text_color=MAIN_TEXT,
                           font=ctk.CTkFont(size=13)).grid(
             row=1, column=1, sticky="ew", padx=(10, 0))
         # Download strategy: which YouTube client to request videos through.
-        ctk.CTkLabel(card, text="Strategy", font=ctk.CTkFont(size=12),
+        ctk.CTkLabel(body, text="Strategy", font=ctk.CTkFont(size=12),
                      text_color=MUTED_TEXT).grid(
-            row=2, column=0, sticky="w", padx=18, pady=(8, 4))
+            row=1, column=0, sticky="w", padx=18, pady=(6, 4))
         self.strategy_var = tk.StringVar(value=STRATEGY_OPTIONS[0])
-        ctk.CTkOptionMenu(card, variable=self.strategy_var,
-                          values=STRATEGY_OPTIONS, height=40, corner_radius=10,
+        ctk.CTkOptionMenu(body, variable=self.strategy_var,
+                          values=STRATEGY_OPTIONS, height=38, corner_radius=10,
                           fg_color="#1A1A1A", button_color=ACCENT,
                           button_hover_color=ACCENT_HOVER,
                           text_color=MAIN_TEXT,
                           font=ctk.CTkFont(size=13)).grid(
-            row=3, column=0, sticky="ew", padx=14, pady=(0, 12))
+            row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
 
     def _build_destination_card(self):
         card = self._card(self.controls_col, 1)
-        _section_title(card, "②  Destination").grid(
-            row=0, column=0, sticky="w", padx=18, pady=(12, 6))
+        body = self._card_head(card, "destination", "②  Destination")
         self.folder_label = ctk.CTkLabel(
-            card, text=self.download_dir, anchor="w",
+            body, text=self.download_dir, anchor="w",
             font=ctk.CTkFont(size=12), text_color=MUTED_TEXT,
-            fg_color="#1A1A1A", corner_radius=10, height=42,
+            fg_color="#1A1A1A", corner_radius=10, height=40,
             wraplength=330, justify="left")
-        self.folder_label.grid(row=1, column=0, sticky="ew",
+        self.folder_label.grid(row=0, column=0, sticky="ew",
                                padx=14, ipadx=10)
-        row = ctk.CTkFrame(card, fg_color="transparent")
-        row.grid(row=2, column=0, sticky="ew", padx=14, pady=(8, 12))
+        row = ctk.CTkFrame(body, fg_color="transparent")
+        row.grid(row=1, column=0, sticky="ew", padx=14, pady=(6, 10))
         row.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkButton(row, text="Browse…", height=38, corner_radius=9,
+        ctk.CTkButton(row, text="Browse…", height=36, corner_radius=9,
                       fg_color="#3A3A3A", hover_color="#4A4A4A",
                       text_color=MAIN_TEXT,
                       command=self.choose_folder).grid(
             row=0, column=0, sticky="ew", padx=(0, 5))
-        ctk.CTkButton(row, text="Open Folder", height=38, corner_radius=9,
+        ctk.CTkButton(row, text="Open Folder", height=36, corner_radius=9,
                       fg_color="#3A3A3A", hover_color=ACCENT_HOVER,
                       text_color=MAIN_TEXT,
                       command=self.open_download_folder).grid(
@@ -776,32 +909,31 @@ class ViidaazApp(ctk.CTk):
     def _build_cookies_card(self):
         """③ Cookies — bot-check bypass lives with the other settings."""
         card = self._card(self.controls_col, 2)
-        _section_title(card, "③  Cookies").grid(
-            row=0, column=0, sticky="w", padx=18, pady=(12, 4))
-        ctk.CTkLabel(card, text="Fixes “Sign in to confirm you're not a bot”.",
+        body = self._card_head(card, "cookies", "③  Cookies")
+        ctk.CTkLabel(body, text="Fixes “Sign in to confirm you're not a bot”.",
                      font=ctk.CTkFont(size=11), text_color=MUTED_TEXT).grid(
-            row=1, column=0, sticky="w", padx=18, pady=(0, 8))
-        cookie_row = ctk.CTkFrame(card, fg_color="transparent")
-        cookie_row.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 4))
+            row=0, column=0, sticky="w", padx=18, pady=(6, 8))
+        cookie_row = ctk.CTkFrame(body, fg_color="transparent")
+        cookie_row.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 4))
         cookie_row.grid_columnconfigure(0, weight=1)
         self.cookie_var = tk.StringVar(value=COOKIE_OPTIONS[0])
         self.cookies_file = None
         ctk.CTkOptionMenu(cookie_row, variable=self.cookie_var,
-                          values=COOKIE_OPTIONS, height=40, corner_radius=10,
+                          values=COOKIE_OPTIONS, height=38, corner_radius=10,
                           fg_color="#1A1A1A", button_color=ACCENT,
                           button_hover_color=ACCENT_HOVER,
                           text_color=MAIN_TEXT,
                           font=ctk.CTkFont(size=13)).grid(
             row=0, column=0, sticky="ew", padx=(0, 6))
-        ctk.CTkButton(cookie_row, text="File…", width=76, height=40,
+        ctk.CTkButton(cookie_row, text="File…", width=76, height=38,
                       corner_radius=10, fg_color="#3A3A3A",
                       hover_color="#4A4A4A", text_color=MAIN_TEXT,
                       command=self.choose_cookies_file).grid(
             row=0, column=1)
-        ctk.CTkLabel(card, text="Uses your own logged-in browser session. "
+        ctk.CTkLabel(body, text="Uses your own logged-in browser session. "
                                 "Close the browser first.",
                      font=ctk.CTkFont(size=11), text_color="#6E6E6E").grid(
-            row=3, column=0, sticky="w", padx=18, pady=(0, 12))
+            row=2, column=0, sticky="w", padx=18, pady=(0, 12))
 
     def _build_progress_card(self):
         card = ctk.CTkFrame(self.monitor_col, fg_color=FRAME_COLOR,
@@ -849,17 +981,19 @@ class ViidaazApp(ctk.CTk):
         self._set_step(-1)
 
         # Active-video meta: thumbnail + title / size (filled by pre-check)
-        vmeta = ctk.CTkFrame(card, fg_color="transparent")
-        vmeta.grid(row=3, column=0, sticky="ew", padx=18, pady=(4, 0))
-        vmeta.grid_columnconfigure(1, weight=1)
-        self.thumb_label = ctk.CTkLabel(vmeta, text="", width=112, height=63,
+        self.vmeta = ctk.CTkFrame(card, fg_color="transparent")
+        self.vmeta.grid(row=3, column=0, sticky="ew", padx=18, pady=(4, 0))
+        self.vmeta.grid_columnconfigure(1, weight=1)
+        self.thumb_label = ctk.CTkLabel(self.vmeta, text="", width=112, height=63,
                                         fg_color="#1A1A1A", corner_radius=8)
         self.thumb_label.grid(row=0, column=0, sticky="w", padx=(0, 12))
         self.video_info_label = ctk.CTkLabel(
-            vmeta, text="No video loaded yet.", anchor="w", justify="left",
+            self.vmeta, text="No video loaded yet.", anchor="w", justify="left",
             font=ctk.CTkFont(size=12), text_color=MUTED_TEXT,
             wraplength=560)
         self.video_info_label.grid(row=0, column=1, sticky="ew")
+        # Hidden until a pre-check fills it — saves ~80px when idle.
+        self.vmeta.grid_remove()
 
         meta = ctk.CTkFrame(card, fg_color="transparent")
         meta.grid(row=4, column=0, sticky="ew", padx=18, pady=(4, 2))
@@ -886,6 +1020,7 @@ class ViidaazApp(ctk.CTk):
                             corner_radius=14)
         card.grid(row=1, column=0, sticky="ew", pady=(0, 12))
         card.grid_columnconfigure(0, weight=1)
+        self.queue_card = card
         head = ctk.CTkFrame(card, fg_color="transparent")
         head.grid(row=0, column=0, sticky="ew", padx=18, pady=(12, 6))
         head.grid_columnconfigure(0, weight=1)
@@ -907,6 +1042,7 @@ class ViidaazApp(ctk.CTk):
             self.queue_list, text="Queue is empty — ＋ Queue links to batch them.",
             font=ctk.CTkFont(size=11), text_color=MUTED_TEXT)
         self.queue_empty.grid(row=0, column=0, sticky="w", padx=6, pady=4)
+        self._update_queue_visibility()
 
     # ------------------------------------------------------------------
     # Queue model — every download is an item with snapshotted settings
@@ -942,6 +1078,17 @@ class ViidaazApp(ctk.CTk):
     def _refresh_queue_title(self):
         try:
             self.queue_title.configure(text=f"QUEUE ({len(self.queue)})")
+        except Exception:
+            pass
+        self._update_queue_visibility()
+
+    def _update_queue_visibility(self):
+        """Empty queue takes no space — the card hides itself entirely."""
+        try:
+            if self.queue:
+                self.queue_card.grid()
+            else:
+                self.queue_card.grid_remove()
         except Exception:
             pass
 
@@ -2114,6 +2261,7 @@ class ViidaazApp(ctk.CTk):
 
     def _show_video_meta(self, info: dict, size: int | None):
         try:
+            self.vmeta.grid()
             title = (info.get("title") or "Unknown title").strip()
             dur = info.get("duration_string") or ""
             parts = [title[:80]]
@@ -2131,6 +2279,7 @@ class ViidaazApp(ctk.CTk):
 
     def _clear_video_meta(self):
         try:
+            self.vmeta.grid_remove()
             self.thumb_label.configure(image=None, text="")
             self._thumb_img = None
             self.video_info_label.configure(text="No video loaded yet.")
