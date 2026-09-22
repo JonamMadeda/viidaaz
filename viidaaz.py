@@ -1,11 +1,11 @@
 """
-viidaa — Clean Modern YouTube Downloader (Desktop)
+viidaaz — Clean Modern YouTube Downloader (Desktop)
 ==================================================
 Single-file desktop app built with CustomTkinter + yt-dlp.
 
 Run:
     pip install customtkinter yt-dlp
-    python viidaa.py
+    python viidaaz.py
 
 FFmpeg (MP3 + best-quality MP4 merging) must be on PATH:
     Windows: winget install Gyan.FFmpeg
@@ -57,12 +57,12 @@ STRATEGY_CLIENTS = {
     "TV": ["tv"],
 }
 
-APP_VERSION = "v2.1"
+APP_VERSION = "v2.2"
 
 # Auto-update source: latest GitHub release + Setup asset below.
 GITHUB_OWNER = "JonamMadeda"
-GITHUB_REPO = "viidaa"
-UPDATE_ASSET = "viidaa-Setup.exe"
+GITHUB_REPO = "viidaaz"
+UPDATE_ASSET = "viidaaz-Setup.exe"
 
 
 def get_default_download_dir() -> str:
@@ -181,7 +181,7 @@ def _ffmpeg_exe() -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Palettes + persistent config (~/.config or %APPDATA%/viidaa/config.json)
+# Palettes + persistent config (~/.config or %APPDATA%/viidaaz/config.json)
 # ---------------------------------------------------------------------------
 DARK_PALETTE = {
     "bg": "#1E1E1E", "card": "#2D2D2D", "border": "#3A3A3A", "field": "#1A1A1A",
@@ -223,9 +223,9 @@ def _config_path() -> str | None:
     try:
         if sys.platform.startswith("win"):
             base = os.environ.get("APPDATA") or str(Path.home())
-            folder = os.path.join(base, "viidaa")
+            folder = os.path.join(base, "viidaaz")
         else:
-            folder = os.path.join(str(Path.home()), ".config", "viidaa")
+            folder = os.path.join(str(Path.home()), ".config", "viidaaz")
         os.makedirs(folder, exist_ok=True)
         return os.path.join(folder, "config.json")
     except Exception:
@@ -235,7 +235,22 @@ def _config_path() -> str | None:
 def _load_config() -> dict:
     import json
     path = _config_path()
-    if not path or not os.path.isfile(path):
+    if not path:
+        return {}
+    # One-time migration from the old "viidaa" config location.
+    try:
+        if not os.path.isfile(path):
+            if sys.platform.startswith("win"):
+                old = os.path.join(os.environ.get("APPDATA") or "", "viidaa",
+                                   "config.json")
+            else:
+                old = os.path.join(str(Path.home()), ".config", "viidaa",
+                                   "config.json")
+            if old and os.path.isfile(old):
+                shutil.copy2(old, path)
+    except Exception:
+        pass
+    if not os.path.isfile(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -257,13 +272,13 @@ def _save_config(data: dict) -> None:
         pass
 
 
-class ViidaaApp(ctk.CTk):
+class ViidaazApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self._appearance = "Dark"  # or "Light"; applied after UI is built
         ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("dark-blue")
-        self.title(f"viidaa {APP_VERSION} — YouTube Downloader")
+        self.title(f"viidaaz {APP_VERSION} — YouTube Downloader")
         self.minsize(980, 660)
         self.configure(fg_color=BG_COLOR)
         self._set_app_icon()
@@ -351,16 +366,16 @@ class ViidaaApp(ctk.CTk):
     # App icon — custom dark-orange mark (taskbar / title bar)
     # ------------------------------------------------------------------
     def _set_app_icon(self):
-        """Apply assets/viidaa.ico + .png; silently keep defaults if missing."""
+        """Apply assets/viidaaz.ico + .png; silently keep defaults if missing."""
         self._icon_img = None
         try:
-            ico = _resource_path(os.path.join("assets", "viidaa.ico"))
+            ico = _resource_path(os.path.join("assets", "viidaaz.ico"))
             if os.path.exists(ico):
                 try:
                     self.iconbitmap(ico)
                 except Exception:
                     pass
-            png = _resource_path(os.path.join("assets", "viidaa.png"))
+            png = _resource_path(os.path.join("assets", "viidaaz.png"))
             if os.path.exists(png):
                 try:
                     img = tk.PhotoImage(file=png)
@@ -534,7 +549,7 @@ class ViidaaApp(ctk.CTk):
         # In-header brand mark (same artwork as the window icon)
         try:
             from PIL import Image as _PILImage
-            _png = _resource_path(os.path.join("assets", "viidaa.png"))
+            _png = _resource_path(os.path.join("assets", "viidaaz.png"))
             if os.path.exists(_png):
                 _pil = _PILImage.open(_png).resize((36, 36))
                 self._header_icon = ctk.CTkImage(
@@ -548,7 +563,7 @@ class ViidaaApp(ctk.CTk):
         except Exception:
             _logo_col = 0
         ctk.CTkLabel(
-            left, text="viidaa",
+            left, text="viidaaz",
             font=ctk.CTkFont(family="Segoe UI", size=26, weight="bold"),
             text_color=ACCENT,
         ).grid(row=0, column=_logo_col, sticky="w")
@@ -1133,7 +1148,7 @@ class ViidaaApp(ctk.CTk):
         else:
             self.after(600, lambda: self.log(
                 "⚠ No FFmpeg found — MP3 conversion and 1080p+ MP4 merging "
-                "will fail. Reinstall viidaa or add FFmpeg to PATH."))
+                "will fail. Reinstall viidaaz or add FFmpeg to PATH."))
 
     # ------------------------------------------------------------------
     # Responsive: stack panes on narrow windows, side-by-side when wide
@@ -1313,7 +1328,7 @@ class ViidaaApp(ctk.CTk):
                 "FFmpeg not found",
                 "FFmpeg wasn't found (no bundled copy, not on PATH).\n\n"
                 "• MP3 conversion and best-quality MP4 merging need FFmpeg.\n"
-                "• Reinstall viidaa or add FFmpeg to your PATH, then try again.\n\n"
+                "• Reinstall viidaaz or add FFmpeg to your PATH, then try again.\n\n"
                 "The download will still be attempted.",
             ))
         self.is_downloading = True
@@ -1459,7 +1474,7 @@ class ViidaaApp(ctk.CTk):
             self._log_from_thread(f"⛔ Pre-check failed on all clients: {msg[:200]}")
             go = self._ask_from_thread(
                 "Video check failed",
-                "viidaa couldn't read this video's info through any client "
+                "viidaaz couldn't read this video's info through any client "
                 f"({', '.join(c.upper() for c in clients)}), so downloading "
                 "will very likely fail too.\n\n"
                 f"Reason: {self._short_reason(msg)}\n\n"
@@ -1883,7 +1898,7 @@ class ViidaaApp(ctk.CTk):
             item["percent"] = "100%"
         self.status_label.configure(text="✅ Done — saved to your folder.")
         self.log("✅ Done — saved successfully.")
-        self._notify("viidaa — download complete", title)
+        self._notify("viidaaz — download complete", title)
         more = self._pending_count() > 0
         self._finish_active("done")
         if more:
@@ -1915,7 +1930,7 @@ class ViidaaApp(ctk.CTk):
         self._set_stage_text("Cancelled")
         self.status_label.configure(text="⏹ Cancelled by user.")
         self.log("⏹ Cancelled.")
-        self._notify("viidaa — cancelled", title)
+        self._notify("viidaaz — cancelled", title)
         self._finish_active("cancelled")
 
     def _fail(self, message: str):
@@ -1929,7 +1944,7 @@ class ViidaaApp(ctk.CTk):
         self.status_label.configure(text="❌ Download failed — see message.")
         self.log(f"❌ FAILED: {message[:300]}")
         self._last_error = message
-        self._notify("viidaa — download failed", title)
+        self._notify("viidaaz — download failed", title)
         more = self._pending_count() > 0
         self._finish_active("failed")
         if not more:
@@ -2002,9 +2017,9 @@ class ViidaaApp(ctk.CTk):
         """Background completion notice: system toast, else taskbar flash."""
         try:
             from plyer import notification
-            icon = _resource_path(os.path.join("assets", "viidaa.ico"))
+            icon = _resource_path(os.path.join("assets", "viidaaz.ico"))
             notification.notify(title=title, message=message[:200],
-                                app_name="viidaa",
+                                app_name="viidaaz",
                                 app_icon=icon if os.path.isfile(icon) else None,
                                 timeout=8)
             return
@@ -2203,7 +2218,7 @@ class ViidaaApp(ctk.CTk):
             req = urllib.request.Request(
                 f"https://api.github.com/repos/{GITHUB_OWNER}/"
                 f"{GITHUB_REPO}/releases/latest",
-                headers={"User-Agent": "viidaa",
+                headers={"User-Agent": "viidaaz",
                          "Accept": "application/vnd.github+json"})
             with urllib.request.urlopen(req, timeout=15) as resp:
                 rel = json.load(resp)
@@ -2211,7 +2226,7 @@ class ViidaaApp(ctk.CTk):
             if not tag or self._ver_tuple(tag) <= self._ver_tuple(APP_VERSION):
                 if not silent:
                     self.after(0, lambda: messagebox.showinfo(
-                        "Up to date", f"viidaa {APP_VERSION} is the latest."))
+                        "Up to date", f"viidaaz {APP_VERSION} is the latest."))
                 return
             asset_url = None
             for asset in rel.get("assets") or []:
@@ -2230,10 +2245,10 @@ class ViidaaApp(ctk.CTk):
         if not asset_url:
             messagebox.showinfo(
                 "Update available",
-                f"viidaa {tag} is out, but no installer was attached.\n"
+                f"viidaaz {tag} is out, but no installer was attached.\n"
                 f"Get it at github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases")
             return
-        text = f"viidaa {tag} is available (you have {APP_VERSION}).\n"
+        text = f"viidaaz {tag} is available (you have {APP_VERSION}).\n"
         if notes:
             text += f"\nWhat's new:\n{notes}\n"
         text += "\nDownload and install it now? The app will exit."
@@ -2248,9 +2263,9 @@ class ViidaaApp(ctk.CTk):
             import urllib.request
             tmp = os.path.join(
                 os.environ.get("TEMP") or str(Path.home()),
-                f"viidaa-Setup-{tag}.exe")
+                f"viidaaz-Setup-{tag}.exe")
             req = urllib.request.Request(asset_url,
-                                         headers={"User-Agent": "viidaa"})
+                                         headers={"User-Agent": "viidaaz"})
             with urllib.request.urlopen(req, timeout=60) as resp, \
                     open(tmp, "wb") as fh:
                 shutil.copyfileobj(resp, fh, length=1024 * 256)
@@ -2319,7 +2334,7 @@ class ViidaaApp(ctk.CTk):
 
 
 def main():
-    app = ViidaaApp()
+    app = ViidaazApp()
     app.mainloop()
 
 

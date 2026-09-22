@@ -9,4 +9,4 @@ __pycache__/
 ffmpeg/
 
 # Installer output is a release asset, not a repo file
-installer/viidaa-Setup.exe
+installer/*.exe

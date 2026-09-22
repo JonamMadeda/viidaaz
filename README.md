@@ -1,4 +1,4 @@
-# viidaa — clean, modern YouTube downloader (desktop)
+# viidaaz — clean, modern YouTube downloader (desktop)
 
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 ![python](https://img.shields.io/badge/python-3.10%2B-green)
@@ -12,10 +12,10 @@ no installs, no PATH setup.
 ## Download (Windows)
 
 Grab the latest from
-[Releases](https://github.com/JonamMadeda/viidaa/releases):
+[Releases](https://github.com/JonamMadeda/viidaaz/releases):
 
-- **`viidaa-Setup.exe`** — installer (per-user, no admin needed). Recommended.
-- **`viidaa.exe`** — portable, just run it.
+- **`viidaaz-Setup.exe`** — installer (per-user, no admin needed). Recommended.
+- **`viidaaz.exe`** — portable, just run it.
 
 The app checks GitHub releases on launch and offers one-click updates.
 
@@ -24,7 +24,7 @@ The app checks GitHub releases on launch and offers one-click updates.
 ```powershell
 pip install -r requirements.txt
 python tools/fetch_ffmpeg.py   # fetches portable FFmpeg into ffmpeg/
-python viidaa.py
+python viidaaz.py
 ```
 
 ## Build the exe + installer
@@ -32,12 +32,12 @@ python viidaa.py
 ```powershell
 pip install -r requirements.txt
 python tools/fetch_ffmpeg.py
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name viidaa `
-  --icon assets\viidaa.ico --add-data "assets;assets" --add-data "ffmpeg;ffmpeg" viidaa.py
-& "C:\Program Files (x86)\NSIS\makensis.exe" installer\viidaa_setup.nsi
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name viidaaz `
+  --icon assets\viidaaz.ico --add-data "assets;assets" --add-data "ffmpeg;ffmpeg" viidaaz.py
+& "C:\Program Files (x86)\NSIS\makensis.exe" installer\viidaaz_setup.nsi
 ```
 
-Outputs: `dist\viidaa.exe`, `installer\viidaa-Setup.exe`.
+Outputs: `dist\viidaaz.exe`, `installer\viidaaz-Setup.exe`.
 
 ## Features
 

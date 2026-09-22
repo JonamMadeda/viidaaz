@@ -1,18 +1,18 @@
-; viidaa Setup — NSIS installer (per-user, no admin required)
-; Build: makensis installer\viidaa_setup.nsi   (run from the project root)
-; Output: installer\viidaa-Setup.exe
+; viidaaz Setup — NSIS installer (per-user, no admin required)
+; Build: makensis installer\viidaaz_setup.nsi   (run from the project root)
+; Output: installer\viidaaz-Setup.exe
 
-!define APPNAME "viidaa"
-!define APPVERSION "2.1"
+!define APPNAME "viidaaz"
+!define APPVERSION "2.2"
 !define PUBLISHER "JonamMadeda"
-!define EXE "viidaa.exe"
-!define SETUP "viidaa-Setup.exe"
+!define EXE "viidaaz.exe"
+!define SETUP "viidaaz-Setup.exe"
 
 Name "${APPNAME} ${APPVERSION}"
 OutFile "${SETUP}"
 InstallDir "$LOCALAPPDATA\${APPNAME}"
-Icon "..\assets\viidaa.ico"
-UninstallIcon "..\assets\viidaa.ico"
+Icon "..\assets\viidaaz.ico"
+UninstallIcon "..\assets\viidaaz.ico"
 RequestExecutionLevel user
 ShowInstDetails nevershow
 

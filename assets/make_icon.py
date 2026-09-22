@@ -1,10 +1,10 @@
-"""Generate the viidaa app icon (dark-orange theme).
+"""Generate the viidaaz app icon (dark-orange theme).
 
 Tile: deep charcoal rounded square (#242424, border #3A3A3A)
 Glyph: rich dark-orange (#E67E22 / #D35400) disc + white play triangle
        with a small download-tray bar underneath for the "downloader" cue.
 
-Outputs: assets/viidaa.png (512) + assets/viidaa.ico (multi-size)
+Outputs: assets/viidaaz.png (512) + assets/viidaaz.ico (multi-size)
 Run: python assets/make_icon.py
 """
 
@@ -47,11 +47,11 @@ def draw_icon(size: int) -> Image.Image:
 
 def main() -> None:
     icon = draw_icon(SIZE)
-    icon.save(OUT / "viidaa.png", "PNG")
-    icon.save(OUT / "viidaa.ico", "ICO",
+    icon.save(OUT / "viidaaz.png", "PNG")
+    icon.save(OUT / "viidaaz.ico", "ICO",
               sizes=[(16, 16), (24, 24), (32, 32), (48, 48),
                      (64, 64), (128, 128), (256, 256)])
-    print(f"wrote {OUT / 'viidaa.png'} + {OUT / 'viidaa.ico'}")
+    print(f"wrote {OUT / 'viidaaz.png'} + {OUT / 'viidaaz.ico'}")
 
 
 if __name__ == "__main__":
